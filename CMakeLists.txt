@@ -103,10 +103,8 @@ target_link_libraries(
     ${PROJECT_NAME}
     PUBLIC
         Threads::Threads
+        ${tflite_header}
         ${OPENCV_LIB_PATH}
-        ${LIB_PATH}/libtensorflowlite_c.so
-        ${LIB_PATH}/libtensorflowlite.so
-        ${LIB_PATH}/libexternal_delegate.so
 )
 
 target_include_directories(
@@ -127,6 +125,5 @@ install(
     FILES
         ${LIB_PATH}/libtensorflowlite_c.so
         ${LIB_PATH}/libtensorflowlite.so
-        ${LIB_PATH}/libexternal_delegate.so
     TYPE LIB
 )
