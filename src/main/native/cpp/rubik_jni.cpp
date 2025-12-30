@@ -22,7 +22,6 @@
 #include <jni.h>
 #include <tensorflow/lite/c/c_api.h>
 #include <tensorflow/lite/c/c_api_experimental.h>
-#include <tensorflow/lite/delegates/external/external_delegate.h>
 #include <tensorflow/lite/version.h>
 
 #include <algorithm>
@@ -54,7 +53,6 @@ typedef struct _BOX_RECT {
 
 typedef struct RubikDetector {
   TfLiteInterpreter *interpreter;
-  TfLiteDelegate *delegate;
   TfLiteModel *model;
 } RubikDetector;
 
@@ -222,61 +220,13 @@ Java_org_photonvision_rubik_RubikJNI_create
 
   DEBUG_PRINT("INFO: Loaded model file '%s'\n", model_name);
 
-  // Create external delegate options
-  // We just have to trust that this creates okay, but conveniently if it fails
-  // the check when we insert options will catch it.
-  TfLiteExternalDelegateOptions delegateOptsValue =
-      TfLiteExternalDelegateOptionsDefault("libQnnTFLiteDelegate.so");
-
-  TfLiteExternalDelegateOptions *delegateOpts = &delegateOptsValue;
-
-  // See
-  // https://docs.qualcomm.com/bundle/publicresource/topics/80-70014-54/external-delegate-options-for-qnn-delegate.html
-  // for what the various delegate options are
-  if (TfLiteExternalDelegateOptionsInsert(delegateOpts, "backend_type",
-                                          "htp") != kTfLiteOk) {
-    ThrowRuntimeException(env, "Failed to set backend type to htp");
-    env->ReleaseStringUTFChars(modelPath, model_name);
-    return 0;
-  }
-
-  if (TfLiteExternalDelegateOptionsInsert(delegateOpts, "htp_use_conv_hmx",
-                                          "1") != kTfLiteOk) {
-    ThrowRuntimeException(env, "Failed to enable convolutions");
-    env->ReleaseStringUTFChars(modelPath, model_name);
-    return 0;
-  }
-
-  if (TfLiteExternalDelegateOptionsInsert(delegateOpts, "htp_performance_mode",
-                                          "2") != kTfLiteOk) {
-    ThrowRuntimeException(env, "Failed to set htp performance mode");
-    env->ReleaseStringUTFChars(modelPath, model_name);
-    return 0;
-  }
-
-  // Create the delegate
-  TfLiteDelegate *delegate = TfLiteExternalDelegateCreate(delegateOpts);
-
-  if (!delegate) {
-    ThrowRuntimeException(env, "Failed to create external delegate");
-    env->ReleaseStringUTFChars(modelPath, model_name);
-    return 0;
-  } else {
-    DEBUG_PRINT("INFO: Created external delegate\n");
-  }
-
-  DEBUG_PRINT("INFO: Loaded external delegate\n");
-
   // Create interpreter options
   TfLiteInterpreterOptions *interpreterOpts = TfLiteInterpreterOptionsCreate();
   if (!interpreterOpts) {
     ThrowRuntimeException(env, "Failed to create interpreter options");
-    TfLiteExternalDelegateDelete(delegate);
     env->ReleaseStringUTFChars(modelPath, model_name);
     return 0;
   }
-
-  TfLiteInterpreterOptionsAddDelegate(interpreterOpts, delegate);
 
   // Create the interpreter
   TfLiteInterpreter *interpreter =
@@ -285,28 +235,14 @@ Java_org_photonvision_rubik_RubikJNI_create
 
   if (!interpreter) {
     ThrowRuntimeException(env, "Failed to create interpreter");
-    TfLiteExternalDelegateDelete(delegate);
     env->ReleaseStringUTFChars(modelPath, model_name);
     return 0;
-  }
-
-  // Modify graph with delegate
-  if (TfLiteInterpreterModifyGraphWithDelegate(interpreter, delegate) !=
-      kTfLiteOk) {
-    ThrowRuntimeException(env, "Failed to modify graph with delegate");
-    TfLiteInterpreterDelete(interpreter);
-    TfLiteExternalDelegateDelete(delegate);
-    env->ReleaseStringUTFChars(modelPath, model_name);
-    return 0;
-  } else {
-    DEBUG_PRINT("INFO: Modified graph with external delegate\n");
   }
 
   // Allocate tensors
   if (TfLiteInterpreterAllocateTensors(interpreter) != kTfLiteOk) {
     ThrowRuntimeException(env, "Failed to allocate tensors");
     TfLiteInterpreterDelete(interpreter);
-    TfLiteExternalDelegateDelete(delegate);
     env->ReleaseStringUTFChars(modelPath, model_name);
     return 0;
   }
@@ -316,7 +252,6 @@ Java_org_photonvision_rubik_RubikJNI_create
   // Create RubikDetector object
   RubikDetector *detector = new RubikDetector;
   detector->interpreter = interpreter;
-  detector->delegate = delegate;
   detector->model = model;
 
   // Convert RubikDetector pointer to jlong
@@ -346,8 +281,6 @@ Java_org_photonvision_rubik_RubikJNI_destroy
   // Now safely use the pointers
   if (detector->interpreter)
     TfLiteInterpreterDelete(detector->interpreter);
-  if (detector->delegate)
-    TfLiteExternalDelegateDelete(detector->delegate);
   if (detector->model)
     TfLiteModelDelete(detector->model);
 
