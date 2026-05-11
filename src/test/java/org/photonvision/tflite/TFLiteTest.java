@@ -117,6 +117,20 @@ public class TFLiteTest {
         }
     }
 
+    public boolean checkQuant(String modelPath, int modelVersion) {
+        long ptr = TFLiteJNI.create(modelPath, modelVersion, TFLiteSource.CPU.value());
+
+        if (ptr <= 0) {
+            throw new RuntimeException("Failed to create TFLiteDetector detector");
+        }
+
+        boolean isQuantized = TFLiteJNI.isQuantized(ptr);
+
+        TFLiteJNI.destroy(ptr);
+
+        return isQuantized;
+    }
+
     @Test
     public void testYoloV8() {
         TFLiteResult[] expectedResults = {
@@ -145,6 +159,18 @@ public class TFLiteTest {
                 "src/test/resources/images/bus.jpg",
                 2,
                 expectedResults);
+    }
+
+    @Test
+    public void testQuantizationCheckv8() {
+        assertTrue(checkQuant("src/test/resources/yolov8nCoco.tflite"), 1);
+        assertFalse(checkQuant("src/test/resources/yolov8nCocoNoQuant.tflite"), 1);
+    }
+
+    @Test
+    public void testQuantizationCheckv11() {
+        assertTrue(checkQuant("src/test/resources/yolov11nCoco.tflite"), 2);
+        assertFalse(checkQuant("src/test/resources/yolov11nCocoNoQuant.tflite"), 2);
     }
 
     // Helper method to determine if the memory leak test should be enabled
